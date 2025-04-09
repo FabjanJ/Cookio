@@ -21,31 +21,26 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Install Build Tools
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Build Windows
         run: |
           flutter pub get
-          echo "Before build - directory structure:"
-          Get-ChildItem -Recurse
-          flutter build windows --release
-          echo "After build - directory structure:"
-          Get-ChildItem -Recurse
-          echo "Verifying build output..."
-          $buildDir = "build/windows/runner/Release"
-          if (Test-Path $buildDir) {
-            echo "Build directory contents:"
-            Get-ChildItem -Path $buildDir -Recurse -Force
-            if (!(Test-Path "$buildDir/*.exe") -and !(Test-Path "$buildDir/*.msi")) {
-              echo "Warning: No executable files found!"
-              echo "Running flutter build windows --release --verbose"
-              flutter build windows --release --verbose
-            }
-          } else {
-            echo "Error: Build directory missing!"
-            echo "Flutter environment:"
-            flutter doctor -v
-            flutter pub deps
-            echo "Building with verbose output:"
-            flutter build windows --release --verbose
+          echo "Building with verbose output..."
+          flutter build windows --release --verbose
+          echo "Build artifacts:"
+          Get-ChildItem -Path build/windows -Recurse -Force
+          $exePath = "build\windows\runner\Release\*.exe"
+          $msiPath = "build\windows\*.msi"
+          if (-not (Test-Path $exePath)) {
+            echo "::error:: No .exe file found at $exePath"
+            exit 1
+          }
+          if (-not (Test-Path $msiPath)) {
+            echo "::warning:: No .msi file found at $msiPath"
           }
 
       - name: Verify Build Artifacts
