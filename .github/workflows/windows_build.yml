@@ -25,17 +25,18 @@ jobs:
         run: |
           flutter pub get
           flutter build windows --release
-          ls -R build/windows
-          echo "Build files:"
-          ls -la build/windows/runner/Release/
+          echo "Build directory structure:"
+          dir /s build\windows
+          echo "Release files:"
+          dir build\windows\runner\Release\
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: |
-            build/windows/runner/Release/*.exe
-            build/windows/runner/Release/*.msi
-            build/windows/runner/Release/data/
+            build\windows\runner\Release\*.exe
+            build\windows\runner\Release\*.msi
+            build\windows\runner\Release\data\*
           if-no-files-found: error
           retention-days: 5
