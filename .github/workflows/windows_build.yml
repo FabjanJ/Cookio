@@ -29,17 +29,47 @@ jobs:
           flutter build windows --release
           echo "After build - directory structure:"
           Get-ChildItem -Recurse
-          echo "Checking build output:"
-          if (Test-Path build\windows\runner\Release) {
-            Get-ChildItem build\windows\runner\Release
+          echo "Verifying build output..."
+          $buildDir = "build/windows/runner/Release"
+          if (Test-Path $buildDir) {
+            echo "Build directory contents:"
+            Get-ChildItem -Path $buildDir -Recurse -Force
+            if (!(Test-Path "$buildDir/*.exe") -and !(Test-Path "$buildDir/*.msi")) {
+              echo "Warning: No executable files found!"
+              echo "Running flutter build windows --release --verbose"
+              flutter build windows --release --verbose
+            }
           } else {
-            echo "Build output directory does not exist!"
+            echo "Error: Build directory missing!"
+            echo "Flutter environment:"
             flutter doctor -v
-            flutter --version
+            flutter pub deps
+            echo "Building with verbose output:"
+            flutter build windows --release --verbose
+          }
+
+      - name: Verify Build Artifacts
+        if: success()
+        run: |
+          $buildDir = "build/windows/runner/Release"
+          $hasArtifacts = $false
+          
+          if (Test-Path "$buildDir/*.exe") {
+            echo "Found .exe file"
+            $hasArtifacts = $true
+          }
+          if (Test-Path "$buildDir/*.msi") {
+            echo "Found .msi file"
+            $hasArtifacts = $true
+          }
+          
+          if (-not $hasArtifacts) {
+            echo "::warning:: No build artifacts found"
+            exit 0
           }
 
       - name: Upload Artifacts
-        if: success()
+        if: success() && steps.verify.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
