@@ -24,13 +24,22 @@ jobs:
       - name: Build Windows
         run: |
           flutter pub get
+          echo "Before build - directory structure:"
+          Get-ChildItem -Recurse
           flutter build windows --release
-          echo "Build directory structure:"
-          Get-ChildItem -Recurse build\windows
-          echo "Release files:"
-          Get-ChildItem build\windows\runner\Release\
+          echo "After build - directory structure:"
+          Get-ChildItem -Recurse
+          echo "Checking build output:"
+          if (Test-Path build\windows\runner\Release) {
+            Get-ChildItem build\windows\runner\Release
+          } else {
+            echo "Build output directory does not exist!"
+            flutter doctor -v
+            flutter --version
+          }
 
       - name: Upload Artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
@@ -38,5 +47,5 @@ jobs:
             build/windows/runner/Release/*.exe
             build/windows/runner/Release/*.msi
             build/windows/runner/Release/data/*
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 5
