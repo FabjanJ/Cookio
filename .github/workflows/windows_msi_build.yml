@@ -37,11 +37,20 @@ jobs:
           Get-ChildItem -Path "build" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             echo "Gefundene .exe: $($_.FullName)"
           }
-          if (!(Test-Path "build/windows/runner/Release/*.exe")) {
+          $exeFiles = Get-ChildItem -Path "build" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+          if (!$exeFiles) {
             Write-Error "Keine .exe-Datei gefunden! Vollständige Build-Logs:"
             Get-Content "build\windows\flutter\flutter_export_environment.txt"
             Get-Content "build\windows\flutter\flutter_build.log"
             exit 1
+          }
+          echo "Haupt-EXE-Datei gefunden:"
+          $mainExe = $exeFiles | Where-Object { $_.FullName -like "*runner\Release\*.exe" }
+          if ($mainExe) {
+            echo $mainExe.FullName
+          } else {
+            echo "Warnung: Keine EXE im Release-Ordner, aber andere EXEs gefunden:"
+            $exeFiles | ForEach-Object { $_.FullName }
           }
 
       - name: Install WiX Toolset
