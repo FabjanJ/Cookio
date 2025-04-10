@@ -27,11 +27,20 @@ jobs:
           flutter config --enable-windows-desktop
           flutter pub get
           flutter clean
+          echo "Überprüfe Windows-Unterstützung..."
+          flutter doctor -v
+          echo "Starte Build-Prozess..."
           flutter build windows --release --verbose
+          echo "Build-Verzeichnisinhalt:"
           ls -R build/
+          echo "Suche nach .exe-Datei..."
+          Get-ChildItem -Path "build" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            echo "Gefundene .exe: $($_.FullName)"
+          }
           if (!(Test-Path "build/windows/runner/Release/*.exe")) {
-            Write-Error "Keine .exe-Datei gefunden! Build-Logs:"
+            Write-Error "Keine .exe-Datei gefunden! Vollständige Build-Logs:"
             Get-Content "build\windows\flutter\flutter_export_environment.txt"
+            Get-Content "build\windows\flutter\flutter_build.log"
             exit 1
           }
 
