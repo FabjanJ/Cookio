@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-  <Product Id='*' Name='Your Flutter App' Language='1033' Version='1.0.0.0' Manufacturer='YourCompany' UpgradeCode='PUT-GUID-HERE'>
+  <Product Id='*' Name='$appName' Language='1033' Version='1.0.0.0' Manufacturer='YourCompany' UpgradeCode='12345678-1234-1234-1234-123456789ABC'>
     <Package InstallerVersion='200' Compressed='yes' InstallScope='perMachine' />
-    <MajorUpgrade DowngradeErrorMessage='A newer version of [ProductName] is already installed.' />
+    <MajorUpgrade DowngradeErrorMessage='A newer version is already installed.' />
     <MediaTemplate EmbedCab='yes' />
     <Feature Id='ProductFeature' Title='Main Feature' Level='1'>
       <ComponentGroupRef Id='ProductComponents' />
@@ -11,14 +11,14 @@
   <Fragment>
     <Directory Id='TARGETDIR' Name='SourceDir'>
       <Directory Id='ProgramFilesFolder'>
-        <Directory Id='INSTALLFOLDER' Name='Your Flutter App' />
+        <Directory Id='INSTALLFOLDER' Name='$appName' />
       </Directory>
     </Directory>
   </Fragment>
   <Fragment>
     <ComponentGroup Id='ProductComponents' Directory='INSTALLFOLDER'>
       <Component Id='ApplicationFiles'>
-        <File Source='build/windows/runner/Release/your_app.exe' />
+        <File Source='$exePath' />
       </Component>
     </ComponentGroup>
   </Fragment>
