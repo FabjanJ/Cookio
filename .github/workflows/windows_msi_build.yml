@@ -86,8 +86,21 @@ jobs:
           & "$wixPath\light.exe" -ext WixUIExtension installer/app.wixobj -out installer/$appName.msi
           echo "Generated MSI with UpgradeCode: $guid"
 
-      - name: Upload Artifacts
+      - name: Find and Upload EXE
+        run: |
+          $exeFile = (Get-ChildItem -Path "build" -Filter "*.exe" -Recurse | Select-Object -First 1)
+          if ($exeFile) {
+            echo "Found EXE at: $($exeFile.FullName)"
+            mkdir -p upload
+            Copy-Item -Path $exeFile.FullName -Destination "upload/app.exe"
+          } else {
+            Write-Error "No EXE file found in build directory!"
+            Get-ChildItem -Path "build" -Recurse | Format-Table FullName
+            exit 1
+          }
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe-installer
-          path: build/windows/runner/Release/*.exe
+          path: upload/app.exe
