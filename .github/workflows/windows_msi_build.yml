@@ -54,7 +54,10 @@ jobs:
           }
 
       - name: Install WiX Toolset
-        run: choco install wixtoolset -y
+        run: |
+          choco install wixtoolset -y --version 3.11.2
+          echo "WiX Toolset installiert, Pfade:"
+          dir "C:\Program Files (x86)\WiX Toolset *\bin\candle.exe" -Recurse
 
       - name: Generate MSI Installer
         run: |
