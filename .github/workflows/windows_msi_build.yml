@@ -26,10 +26,13 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter build windows --release --verbose
-          if (!(Test-Path "build/windows/runner/Release/*.exe")) {
-            Write-Error "No .exe file found!"
+          ls -R build/windows/runner/
+          $exePath = (Get-ChildItem -Path "build/windows/runner" -Filter "*.exe" -Recurse | Select-Object -First 1).FullName
+          if (!$exePath) {
+            Write-Error "Keine .exe-Datei gefunden! Build fehlgeschlagen?"
             exit 1
           }
+          echo "EXE gefunden unter: $exePath"
 
       - name: Install WiX Toolset
         run: choco install wixtoolset -y
