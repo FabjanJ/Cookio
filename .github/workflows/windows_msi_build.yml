@@ -26,9 +26,10 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter clean
+          flutter pub get
           flutter build windows --release --verbose
-          ls -R build/
-          $exePath = (Get-ChildItem -Path "build" -Filter "*.exe" -Recurse | Where-Object { $_.FullName -like "*runner\Release\*.exe" } | Select-Object -First 1).FullName
+          ls -R build/windows/runner/Release/
+          $exePath = (Get-ChildItem -Path "build/windows/runner/Release" -Filter "*.exe" -Recurse | Select-Object -First 1).FullName
           if (!$exePath) {
             Write-Error "Keine .exe-Datei gefunden!"
             exit 1
