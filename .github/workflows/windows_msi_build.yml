@@ -29,16 +29,23 @@ jobs:
           flutter pub get
           flutter build windows --release --verbose
           
-          # Sicherstellen dass die EXE vorhanden ist
-          if (!(Test-Path "build/windows/runner/Release/*.exe")) {
-            Write-Output "Build-Verzeichnis:"
-            Get-ChildItem -Path "build" -Recurse
-            Write-Error "EXE-Datei wurde nicht gefunden!"
-            exit 1
+          # Debug-Ausgabe der Build-Verzeichnisstruktur
+          Write-Output "Build-Verzeichnisstruktur:"
+          Get-ChildItem -Path "build" -Recurse | Format-Table FullName
+          
+          # Expliziter Pfad zur EXE
+          $exePath = "build/windows/runner/Release/*.exe"
+          if (!(Test-Path $exePath)) {
+              Write-Output "Suche alternative EXE-Pfade..."
+              $exePath = (Get-ChildItem -Path "build" -Filter "*.exe" -Recurse | Select-Object -First 1).FullName
+              if (!$exePath) {
+                  Write-Error "Keine EXE-Datei gefunden!"
+                  exit 1
+              }
           }
           
-          # Komprimieren für besseren Download
-          Compress-Archive -Path "build/windows/runner/Release/*" -DestinationPath "app_release.zip"
+          Write-Output "EXE gefunden unter: $exePath"
+          Compress-Archive -Path $exePath -DestinationPath "app_release.zip"
           if (!$exePath) {
             Write-Error "Keine .exe-Datei gefunden!"
             exit 1
