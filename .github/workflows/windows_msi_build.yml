@@ -52,7 +52,7 @@ jobs:
           $wxsContent = @"
           <?xml version='1.0' encoding='UTF-8'?>
           <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-            <Product Id='*' Name='$appName' Language='1033' Version='1.0.0.0' Manufacturer='YourCompany' UpgradeCode='PUT-GUID-HERE'>
+            <Product Id='*' Name='$appName' Language='1033' Version='1.0.0.0' Manufacturer='YourCompany' UpgradeCode='911b62cc-076b-4cd7-a563-f2ed00101f0e'>
               <Package InstallerVersion='200' Compressed='yes' InstallScope='perMachine' />
               <MajorUpgrade DowngradeErrorMessage='A newer version is already installed.' />
               <MediaTemplate EmbedCab='yes' />
@@ -87,7 +87,5 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-msi-installer
-          path: |
-            installer/*.msi
-            build/windows/runner/Release/*.exe
+          name: windows-exe-installer
+          path: build/windows/runner/Release/*.exe
