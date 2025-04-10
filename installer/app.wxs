@@ -1,25 +1,26 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-  <Product Id='*' Name='$appName' Language='1033' Version='1.0.0.0' Manufacturer='YourCompany' UpgradeCode='12345678-1234-1234-1234-123456789ABC'>
-    <Package InstallerVersion='200' Compressed='yes' InstallScope='perMachine' />
-    <MajorUpgrade DowngradeErrorMessage='A newer version is already installed.' />
-    <MediaTemplate EmbedCab='yes' />
-    <Feature Id='ProductFeature' Title='Main Feature' Level='1'>
-      <ComponentGroupRef Id='ProductComponents' />
+  <Product Id="*" Name="my_firstproject" Language="1033" Version="1.0.0.0" Manufacturer="MyCompany" UpgradeCode="911b62cc-076b-4cd7-a563-f2ed00101f0e">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"/>
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/>
+    <MediaTemplate EmbedCab="yes"/>
+    <Feature Id="ProductFeature" Title="Main Feature" Level="1">
+      <ComponentGroupRef Id="ProductComponents"/>
     </Feature>
   </Product>
   <Fragment>
-    <Directory Id='TARGETDIR' Name='SourceDir'>
-      <Directory Id='ProgramFilesFolder'>
-        <Directory Id='INSTALLFOLDER' Name='$appName' />
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="my_firstproject"/>
       </Directory>
     </Directory>
   </Fragment>
   <Fragment>
-    <ComponentGroup Id='ProductComponents' Directory='INSTALLFOLDER'>
-      <Component Id='ApplicationFiles'>
-        <File Source='$exePath' />
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="ApplicationFiles" Guid="d741de38-b7dc-4d25-81fe-73b6f9712ef6">
+        <File Source="build\windows\runner\Release\my_firstproject.exe"/>
       </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>
+
