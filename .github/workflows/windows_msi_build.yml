@@ -25,14 +25,15 @@ jobs:
       - name: Build Windows
         run: |
           flutter config --enable-windows-desktop
+          flutter pub get
+          flutter clean
           flutter build windows --release --verbose
-          ls -R build/windows/runner/
-          $exePath = (Get-ChildItem -Path "build/windows/runner" -Filter "*.exe" -Recurse | Select-Object -First 1).FullName
-          if (!$exePath) {
-            Write-Error "Keine .exe-Datei gefunden! Build fehlgeschlagen?"
+          ls -R build/
+          if (!(Test-Path "build/windows/runner/Release/*.exe")) {
+            Write-Error "Keine .exe-Datei gefunden! Build-Logs:"
+            Get-Content "build\windows\flutter\flutter_export_environment.txt"
             exit 1
           }
-          echo "EXE gefunden unter: $exePath"
 
       - name: Install WiX Toolset
         run: choco install wixtoolset -y
