@@ -22,15 +22,23 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build Windows
+      - name: Build Windows Executable
         run: |
           flutter config --enable-windows-desktop
           flutter clean
           flutter pub get
           flutter build windows --release --verbose
-          mkdir -p build/windows/runner/Release
-          ls -R build/
-          $exePath = (Get-ChildItem -Path "build" -Filter "*.exe" -Recurse | Select-Object -First 1).FullName
+          
+          # Sicherstellen dass die EXE vorhanden ist
+          if (!(Test-Path "build/windows/runner/Release/*.exe")) {
+            Write-Output "Build-Verzeichnis:"
+            Get-ChildItem -Path "build" -Recurse
+            Write-Error "EXE-Datei wurde nicht gefunden!"
+            exit 1
+          }
+          
+          # Komprimieren für besseren Download
+          Compress-Archive -Path "build/windows/runner/Release/*" -DestinationPath "app_release.zip"
           if (!$exePath) {
             Write-Error "Keine .exe-Datei gefunden!"
             exit 1
@@ -86,21 +94,8 @@ jobs:
           & "$wixPath\light.exe" -ext WixUIExtension installer/app.wixobj -out installer/$appName.msi
           echo "Generated MSI with UpgradeCode: $guid"
 
-      - name: Find and Upload EXE
-        run: |
-          $exeFile = (Get-ChildItem -Path "build" -Filter "*.exe" -Recurse | Select-Object -First 1)
-          if ($exeFile) {
-            echo "Found EXE at: $($exeFile.FullName)"
-            mkdir -p upload
-            Copy-Item -Path $exeFile.FullName -Destination "upload/app.exe"
-          } else {
-            Write-Error "No EXE file found in build directory!"
-            Get-ChildItem -Path "build" -Recurse | Format-Table FullName
-            exit 1
-          }
-
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-exe-installer
-          path: upload/app.exe
+          name: windows-app-release
+          path: app_release.zip
