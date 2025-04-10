@@ -11,37 +11,35 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Install Build Tools
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
       - name: Build Windows
         run: |
-          flutter pub get
-          echo "Building with verbose output..."
+          flutter config --enable-windows-desktoplk
           flutter build windows --release --verbose
-          echo "Build artifacts:"
-          Get-ChildItem -Path build/windows -Recurse -Force
-          $exePath = "build\windows\runner\Release\*.exe"
-          $msiPath = "build\windows\*.msi"
-          if (-not (Test-Path $exePath)) {
-            echo "::error:: No .exe file found at $exePath"
+          ls -la build/windows/runner/Release/
+          if (!(Test-Path "build/windows/runner/Release/*.exe")) {
+            Write-Error "No .exe file found!"
             exit 1
           }
-          if (-not (Test-Path $msiPath)) {
-            echo "::warning:: No .msi file found at $msiPath"
-          }
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          ls -R build/windows/runner/Release
+          if [ ! -f "build/windows/runner/Release/*.exe" ]; then
+            echo "::error:: No .exe file found!"
+            exit 1
+          fi
 
       - name: Verify Build Artifacts
         if: success()
