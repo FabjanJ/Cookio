@@ -1,0 +1,61 @@
+name: Windows MSI Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: |
+          flutter config --enable-windows-desktop
+          flutter build windows --release --verbose
+          if (!(Test-Path "build/windows/runner/Release/*.exe")) {
+            Write-Error "No .exe file found!"
+            exit 1
+          }
+
+      - name: Install WiX Toolset
+        run: choco install wixtoolset -y
+
+      - name: Generate MSI Installer
+        run: |
+          # Get the app name from pubspec.yaml
+          $appName = (Get-Content pubspec.yaml | Select-String -Pattern '^name: (.+)$').Matches.Groups[1].Value
+          $exePath = "build/windows/runner/Release/$appName.exe"
+          
+          # Update the WiX config with actual paths
+          (Get-Content installer/app.wxs) | 
+            ForEach-Object { $_ -replace 'Your Flutter App', $appName } |
+            ForEach-Object { $_ -replace 'your_app.exe', "$appName.exe" } |
+            ForEach-Object { $_ -replace 'YourCompany', 'Your Company Name' } |
+            Set-Content installer/app.wxs
+
+          # Generate MSI
+          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" installer/app.wxs -out installer/app.wixobj
+          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\light.exe" installer/app.wixobj -out installer/$appName.msi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi-installer
+          path: |
+            installer/*.msi
+            build/windows/runner/Release/*.exe
+          retention-days: 5
