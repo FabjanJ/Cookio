@@ -78,9 +78,11 @@ jobs:
           "@
           Set-Content -Path "installer/app.wxs" -Value $wxsContent
 
-          # MSI generieren
-          & "$wixPath\candle.exe" installer/app.wxs -out installer/app.wixobj
-          & "$wixPath\light.exe" installer/app.wixobj -out installer/$appName.msi
+          # GUID generieren und MSI erstellen
+          $guid = [guid]::NewGuid().ToString()
+          & "$wixPath\candle.exe" -dExePath="$exePath" -dUpgradeCode="$guid" installer/app.wxs -out installer/app.wixobj
+          & "$wixPath\light.exe" -ext WixUIExtension installer/app.wixobj -out installer/$appName.msi
+          echo "Generated MSI with UpgradeCode: $guid"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
