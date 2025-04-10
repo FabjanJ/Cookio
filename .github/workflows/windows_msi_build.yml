@@ -25,59 +25,62 @@ jobs:
       - name: Build Windows
         run: |
           flutter config --enable-windows-desktop
-          flutter pub get
           flutter clean
-          echo "Überprüfe Windows-Unterstützung..."
-          flutter doctor -v
-          echo "Starte Build-Prozess..."
           flutter build windows --release --verbose
-          echo "Build-Verzeichnisinhalt:"
           ls -R build/
-          echo "Suche nach .exe-Datei..."
-          Get-ChildItem -Path "build" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            echo "Gefundene .exe: $($_.FullName)"
-          }
-          $exeFiles = Get-ChildItem -Path "build" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
-          if (!$exeFiles) {
-            Write-Error "Keine .exe-Datei gefunden! Vollständige Build-Logs:"
-            Get-Content "build\windows\flutter\flutter_export_environment.txt"
-            Get-Content "build\windows\flutter\flutter_build.log"
+          $exePath = (Get-ChildItem -Path "build" -Filter "*.exe" -Recurse | Where-Object { $_.FullName -like "*runner\Release\*.exe" } | Select-Object -First 1).FullName
+          if (!$exePath) {
+            Write-Error "Keine .exe-Datei gefunden!"
             exit 1
           }
-          echo "Haupt-EXE-Datei gefunden:"
-          $mainExe = $exeFiles | Where-Object { $_.FullName -like "*runner\Release\*.exe" }
-          if ($mainExe) {
-            echo $mainExe.FullName
-          } else {
-            echo "Warnung: Keine EXE im Release-Ordner, aber andere EXEs gefunden:"
-            $exeFiles | ForEach-Object { $_.FullName }
-          }
+          echo "EXE gefunden unter: $exePath"
 
-      - name: Verify WiX Toolset
+      - name: Install WiX Toolset
         run: |
-          echo "Überprüfe WiX Installation..."
+          choco install wixtoolset -y
+          echo "WiX installiert unter:"
           dir "C:\Program Files (x86)\WiX Toolset *\bin\candle.exe" -Recurse
-          if ($LASTEXITCODE -ne 0) {
-            echo "WiX nicht gefunden, installiere..."
-            choco install wixtoolset -y
-          }
 
       - name: Generate MSI Installer
         run: |
-          # Get the app name from pubspec.yaml
+          # App-Name und Pfade ermitteln
           $appName = (Get-Content pubspec.yaml | Select-String -Pattern '^name: (.+)$').Matches.Groups[1].Value
-          $exePath = "build/windows/runner/Release/$appName.exe"
-          
-          # Update the WiX config with actual paths
-          (Get-Content installer/app.wxs) | 
-            ForEach-Object { $_ -replace 'Your Flutter App', $appName } |
-            ForEach-Object { $_ -replace 'your_app.exe', "$appName.exe" } |
-            ForEach-Object { $_ -replace 'YourCompany', 'Your Company Name' } |
-            Set-Content installer/app.wxs
+          $exePath = (Get-ChildItem -Path "build" -Filter "*.exe" -Recurse | Where-Object { $_.FullName -like "*runner\Release\*.exe" } | Select-Object -First 1).FullName
+          $wixPath = (Get-ChildItem "C:\Program Files (x86)\WiX Toolset *\bin\" | Select-Object -First 1).FullName
 
-          # Generate MSI
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" installer/app.wxs -out installer/app.wixobj
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\light.exe" installer/app.wixobj -out installer/$appName.msi
+          # WiX Config erstellen
+          $wxsContent = @"
+          <?xml version='1.0' encoding='UTF-8'?>
+          <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+            <Product Id='*' Name='$appName' Language='1033' Version='1.0.0.0' Manufacturer='YourCompany' UpgradeCode='PUT-GUID-HERE'>
+              <Package InstallerVersion='200' Compressed='yes' InstallScope='perMachine' />
+              <MajorUpgrade DowngradeErrorMessage='A newer version is already installed.' />
+              <MediaTemplate EmbedCab='yes' />
+              <Feature Id='ProductFeature' Title='Main Feature' Level='1'>
+                <ComponentGroupRef Id='ProductComponents' />
+              </Feature>
+            </Product>
+            <Fragment>
+              <Directory Id='TARGETDIR' Name='SourceDir'>
+                <Directory Id='ProgramFilesFolder'>
+                  <Directory Id='INSTALLFOLDER' Name='$appName' />
+                </Directory>
+              </Directory>
+            </Fragment>
+            <Fragment>
+              <ComponentGroup Id='ProductComponents' Directory='INSTALLFOLDER'>
+                <Component Id='ApplicationFiles'>
+                  <File Source='$exePath' />
+                </Component>
+              </ComponentGroup>
+            </Fragment>
+          </Wix>
+          "@
+          Set-Content -Path "installer/app.wxs" -Value $wxsContent
+
+          # MSI generieren
+          & "$wixPath\candle.exe" installer/app.wxs -out installer/app.wixobj
+          & "$wixPath\light.exe" installer/app.wixobj -out installer/$appName.msi
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -86,4 +89,3 @@ jobs:
           path: |
             installer/*.msi
             build/windows/runner/Release/*.exe
-          retention-days: 5
