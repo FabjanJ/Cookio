@@ -53,11 +53,14 @@ jobs:
             $exeFiles | ForEach-Object { $_.FullName }
           }
 
-      - name: Install WiX Toolset
+      - name: Verify WiX Toolset
         run: |
-          choco install wixtoolset -y --version 3.11.2
-          echo "WiX Toolset installiert, Pfade:"
+          echo "Überprüfe WiX Installation..."
           dir "C:\Program Files (x86)\WiX Toolset *\bin\candle.exe" -Recurse
+          if ($LASTEXITCODE -ne 0) {
+            echo "WiX nicht gefunden, installiere..."
+            choco install wixtoolset -y
+          }
 
       - name: Generate MSI Installer
         run: |
