@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-// ignore: unused_import
+import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 
 void main() {
@@ -108,6 +108,14 @@ class CreateRecipeTab extends StatefulWidget {
 class _CreateRecipeTabState extends State<CreateRecipeTab> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
+  final List<String> _availableLabels = [
+    'Glutenfrei',
+    'Laktosefrei',
+    'Nussfrei',
+    'Apfelfrei',
+    'Seleriefrei'
+  ];
+  final Set<String> _selectedLabels = {};
 
   Future<void> _saveRecipe() async {
     if (_titleController.text.isEmpty) return;
@@ -118,8 +126,13 @@ class _CreateRecipeTabState extends State<CreateRecipeTab> {
       await recipesDir.create();
     }
 
-    final file = File('${recipesDir.path}/${_titleController.text}.txt');
-    await file.writeAsString(_contentController.text);
+    final recipeData = {
+      'title': _titleController.text,
+      'content': _contentController.text,
+      'labels': _selectedLabels.toList(),
+    };
+    final file = File('${recipesDir.path}/${_titleController.text}.json');
+    await file.writeAsString(jsonEncode(recipeData));
     
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Rezept gespeichert!'))
@@ -127,6 +140,17 @@ class _CreateRecipeTabState extends State<CreateRecipeTab> {
     
     _titleController.clear();
     _contentController.clear();
+    setState(() => _selectedLabels.clear());
+  }
+
+  void _toggleLabel(String label) {
+    setState(() {
+      if (_selectedLabels.contains(label)) {
+        _selectedLabels.remove(label);
+      } else {
+        _selectedLabels.add(label);
+      }
+    });
   }
 
   @override
@@ -137,15 +161,38 @@ class _CreateRecipeTabState extends State<CreateRecipeTab> {
         children: [
           TextField(
             controller: _titleController,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Rezeptname',
-              labelStyle: TextStyle(color: const Color.fromARGB(255, 12, 90, 180)),
+              labelStyle: TextStyle(color: Color.fromARGB(255, 12, 90, 180)),
             ),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text('Labels:', style: TextStyle(
+                  color: const Color.fromARGB(255, 12, 90, 180),
+                  fontWeight: FontWeight.bold,
+                )),
+                Wrap(
+                  spacing: 8,
+                  children: _availableLabels.map((label) {
+                    return FilterChip(
+                      label: Text(label),
+                      selected: _selectedLabels.contains(label),
+                      onSelected: (_) => _toggleLabel(label),
+                      selectedColor: const Color.fromARGB(255, 12, 90, 180).withOpacity(0.2),
+                      checkmarkColor: const Color.fromARGB(255, 12, 90, 180),
+                      labelStyle: TextStyle(
+                        color: _selectedLabels.contains(label)
+                          ? const Color.fromARGB(255, 12, 90, 180)
+                          : Colors.black,
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     IconButton(
@@ -195,15 +242,21 @@ class _CreateRecipeTabState extends State<CreateRecipeTab> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
                 Expanded(
                   child: TextField(
                     controller: _contentController,
                     maxLines: null,
                     expands: true,
-            decoration: InputDecoration(
-              hintText: 'Rezept eingeben...',
-              hintStyle: TextStyle(color: Colors.grey.shade600),
-            ),
+                    decoration: InputDecoration(
+                      hintText: 'Rezept eingeben...',
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade600,
+                        inherit: false,
+                        fontSize: 14.0,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -258,11 +311,31 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
     }
   }
 
-  List<FileSystemEntity> get _filteredRecipes {
+  Future<List<FileSystemEntity>> _getFilteredRecipes() async {
     if (_searchQuery.isEmpty) return _recipes;
-    return _recipes.where((file) => 
-      file.path.toLowerCase().contains(_searchQuery.toLowerCase())
-    ).toList();
+    
+    final filtered = <FileSystemEntity>[];
+    for (final file in _recipes) {
+      try {
+        final jsonString = await File(file.path).readAsString();
+        final recipeData = jsonDecode(jsonString);
+        final titleMatch = recipeData['title'].toString().toLowerCase()
+          .contains(_searchQuery.toLowerCase());
+        final labelMatch = recipeData['labels'] != null && 
+          (recipeData['labels'] as List).any((label) => 
+            label.toString().toLowerCase().contains(_searchQuery.toLowerCase()));
+        
+        if (titleMatch || labelMatch) {
+          filtered.add(file);
+        }
+      } catch (e) {
+        // Fallback to filename if JSON parsing fails
+        if (file.path.toLowerCase().contains(_searchQuery.toLowerCase())) {
+          filtered.add(file);
+        }
+      }
+    }
+    return filtered;
   }
 
   List<TextSpan> _parseContent(String text) {
@@ -323,36 +396,45 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
           ),
         ),
         Expanded(
-          child: _filteredRecipes.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.menu_book, size: 64, color: Colors.grey.shade400),
-                    const SizedBox(height: 16),
-                    Text(
-                      _searchQuery.isEmpty 
-                        ? 'Keine Rezepte vorhanden' 
-                        : 'Keine passenden Rezepte',
-                      style: TextStyle(color: Colors.grey.shade600),
+          child: FutureBuilder<List<FileSystemEntity>>(
+            future: _getFilteredRecipes(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final filtered = snapshot.data!;
+              return filtered.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.menu_book, size: 64, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          _searchQuery.isEmpty 
+                            ? 'Keine Rezepte vorhanden' 
+                            : 'Keine passenden Rezepte',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              )
-            : ListView.builder(
-                itemCount: _filteredRecipes.length,
-                itemBuilder: (context, index) {
-                  final file = _filteredRecipes[index];
-                  final name = file.path.split('/').last.replaceAll('.txt', '');
-                  return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: ListTile(
-                      title: Text(name, style: TextStyle(color: const Color.fromARGB(255, 12, 90, 180))),
-                      onTap: () => _showRecipeDialog(context, file, name),
-                    ),
+                  )
+                : ListView.builder(
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final file = filtered[index];
+                      final name = file.path.split('/').last.replaceAll('.json', '');
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: ListTile(
+                          title: Text(name, style: TextStyle(color: const Color.fromARGB(255, 12, 90, 180))),
+                          onTap: () => _showRecipeDialog(context, file, name),
+                        ),
+                      );
+                    },
                   );
-                },
-              ),
+            },
+          ),
         ),
       ],
     );
@@ -360,19 +442,49 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
 
   Future<void> _showRecipeDialog(BuildContext context, FileSystemEntity file, String name) async {
     try {
-      final content = await File(file.path).readAsString();
+      final jsonString = await File(file.path).readAsString();
+      final recipeData = jsonDecode(jsonString);
       if (!mounted) return;
       
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(name),
+          title: Text(recipeData['title']),
           content: SingleChildScrollView(
-            child: RichText(
-              text: TextSpan(
-                style: DefaultTextStyle.of(context).style,
-                children: _parseContent(content),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (recipeData['labels'] != null && recipeData['labels'].isNotEmpty)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Labels:', style: TextStyle(
+                        color: const Color.fromARGB(255, 12, 90, 180),
+                        fontWeight: FontWeight.bold,
+                      )),
+                      Wrap(
+                        spacing: 8,
+                        children: (recipeData['labels'] as List).map((label) {
+                          return Chip(
+                            label: Text(label),
+                            backgroundColor: const Color.fromARGB(255, 12, 90, 180).withOpacity(0.2),
+                            labelStyle: TextStyle(
+                              color: const Color.fromARGB(255, 12, 90, 180),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                const SizedBox(height: 16),
+                RichText(
+                  text: TextSpan(
+                    style: DefaultTextStyle.of(context).style,
+                    children: _parseContent(recipeData['content']),
+                  ),
+                ),
+              ],
             ),
           ),
           actions: [
