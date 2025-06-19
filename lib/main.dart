@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
-import 'dart:io';
 import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+// Only import these for non-web platforms
+import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 void main() {
@@ -112,35 +115,50 @@ class _CreateRecipeTabState extends State<CreateRecipeTab> {
     'Glutenfrei',
     'Laktosefrei',
     'Nussfrei',
+    'Nur Erdnussfrei',
     'Apfelfrei',
-    'Seleriefrei'
+    'Seleriefrei',
+    'Sojafrei',
+    'Fischfrei',
+    'Milchfrei',
   ];
   final Set<String> _selectedLabels = {};
 
   Future<void> _saveRecipe() async {
     if (_titleController.text.isEmpty) return;
-    
-    final appDir = await getApplicationDocumentsDirectory();
-    final recipesDir = Directory('${appDir.path}/recipes');
-    if (!await recipesDir.exists()) {
-      await recipesDir.create();
-    }
-
     final recipeData = {
       'title': _titleController.text,
       'content': _contentController.text,
       'labels': _selectedLabels.toList(),
     };
-    final file = File('${recipesDir.path}/${_titleController.text}.json');
-    await file.writeAsString(jsonEncode(recipeData));
-    
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      // Store all recipes as a map in shared_preferences
+      final allRecipesString = prefs.getString('recipes') ?? '{}';
+      final Map<String, dynamic> allRecipes = jsonDecode(allRecipesString);
+      allRecipes[_titleController.text] = recipeData;
+      await prefs.setString('recipes', jsonEncode(allRecipes));
+    } else {
+      final appDir = await getApplicationDocumentsDirectory();
+      final recipesDir = Directory('${appDir.path}/recipes');
+      if (!await recipesDir.exists()) {
+        await recipesDir.create();
+      }
+      final file = File('${recipesDir.path}/${_titleController.text}.json');
+      await file.writeAsString(jsonEncode(recipeData));
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Rezept gespeichert!'))
     );
-    
     _titleController.clear();
     _contentController.clear();
     setState(() => _selectedLabels.clear());
+    // For web, trigger reload in MyRecipesTab
+    if (kIsWeb) {
+      if (context.findAncestorStateOfType<_MyRecipesTabState>() != null) {
+        context.findAncestorStateOfType<_MyRecipesTabState>()!._loadRecipes();
+      }
+    }
   }
 
   void _toggleLabel(String label) {
@@ -281,7 +299,7 @@ class MyRecipesTab extends StatefulWidget {
 }
 
 class _MyRecipesTabState extends State<MyRecipesTab> {
-  List<FileSystemEntity> _recipes = [];
+  List<dynamic> _recipes = [];
   String _searchQuery = '';
   bool _isLoading = false;
 
@@ -294,16 +312,25 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
   Future<void> _loadRecipes() async {
     setState(() => _isLoading = true);
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final recipesDir = Directory('${appDir.path}/recipes');
-      if (await recipesDir.exists()) {
-        final files = await recipesDir.list().toList();
-        setState(() => _recipes = files.whereType<File>().toList());
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        final allRecipesString = prefs.getString('recipes') ?? '{}';
+        final Map<String, dynamic> allRecipes = jsonDecode(allRecipesString);
+        setState(() => _recipes = allRecipes.entries.toList());
+      } else {
+        final appDir = await getApplicationDocumentsDirectory();
+        final recipesDir = Directory('${appDir.path}/recipes');
+        if (await recipesDir.exists()) {
+          final files = await recipesDir.list().toList();
+          setState(() => _recipes = files.whereType<File>().toList());
+        } else {
+          setState(() => _recipes = []);
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Laden: ${e.toString()}'))
+          SnackBar(content: Text('Fehler beim Laden: ${e.toString()}'))
         );
       }
     } finally {
@@ -311,27 +338,36 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
     }
   }
 
-  Future<List<FileSystemEntity>> _getFilteredRecipes() async {
+  Future<List<dynamic>> _getFilteredRecipes() async {
     if (_searchQuery.isEmpty) return _recipes;
-    
-    final filtered = <FileSystemEntity>[];
-    for (final file in _recipes) {
-      try {
-        final jsonString = await File(file.path).readAsString();
-        final recipeData = jsonDecode(jsonString);
-        final titleMatch = recipeData['title'].toString().toLowerCase()
-          .contains(_searchQuery.toLowerCase());
-        final labelMatch = recipeData['labels'] != null && 
-          (recipeData['labels'] as List).any((label) => 
+    final filtered = <dynamic>[];
+    if (kIsWeb) {
+      for (final entry in _recipes) {
+        final recipeData = entry.value;
+        final titleMatch = recipeData['title'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
+        final labelMatch = recipeData['labels'] != null &&
+          (recipeData['labels'] as List).any((label) =>
             label.toString().toLowerCase().contains(_searchQuery.toLowerCase()));
-        
         if (titleMatch || labelMatch) {
-          filtered.add(file);
+          filtered.add(entry);
         }
-      } catch (e) {
-        // Fallback to filename if JSON parsing fails
-        if (file.path.toLowerCase().contains(_searchQuery.toLowerCase())) {
-          filtered.add(file);
+      }
+    } else {
+      for (final file in _recipes) {
+        try {
+          final jsonString = await File(file.path).readAsString();
+          final recipeData = jsonDecode(jsonString);
+          final titleMatch = recipeData['title'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
+          final labelMatch = recipeData['labels'] != null &&
+            (recipeData['labels'] as List).any((label) =>
+              label.toString().toLowerCase().contains(_searchQuery.toLowerCase()));
+          if (titleMatch || labelMatch) {
+            filtered.add(file);
+          }
+        } catch (e) {
+          if (file.path.toLowerCase().contains(_searchQuery.toLowerCase())) {
+            filtered.add(file);
+          }
         }
       }
     }
@@ -381,7 +417,6 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-
     return Column(
       children: [
         Padding(
@@ -396,7 +431,7 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
           ),
         ),
         Expanded(
-          child: FutureBuilder<List<FileSystemEntity>>(
+          child: FutureBuilder<List<dynamic>>(
             future: _getFilteredRecipes(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
@@ -422,15 +457,27 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
                 : ListView.builder(
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
-                      final file = filtered[index];
-                      final name = file.path.split('/').last.replaceAll('.json', '');
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        child: ListTile(
-                          title: Text(name, style: TextStyle(color: const Color.fromARGB(255, 12, 90, 180))),
-                          onTap: () => _showRecipeDialog(context, file, name),
-                        ),
-                      );
+                      if (kIsWeb) {
+                        final entry = filtered[index];
+                        final name = entry.key;
+                        return Card(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          child: ListTile(
+                            title: Text(name, style: TextStyle(color: const Color.fromARGB(255, 12, 90, 180))),
+                            onTap: () => _showRecipeDialogWeb(context, entry, name),
+                          ),
+                        );
+                      } else {
+                        final file = filtered[index];
+                        final name = file.path.split('/').last.replaceAll('.json', '');
+                        return Card(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          child: ListTile(
+                            title: Text(name, style: TextStyle(color: const Color.fromARGB(255, 12, 90, 180))),
+                            onTap: () => _showRecipeDialog(context, file, name),
+                          ),
+                        );
+                      }
                     },
                   );
             },
@@ -440,75 +487,65 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
     );
   }
 
-  Future<void> _showRecipeDialog(BuildContext context, FileSystemEntity file, String name) async {
-    try {
-      final jsonString = await File(file.path).readAsString();
-      final recipeData = jsonDecode(jsonString);
-      if (!mounted) return;
-      
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(recipeData['title']),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (recipeData['labels'] != null && recipeData['labels'].isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Labels:', style: TextStyle(
-                        color: const Color.fromARGB(255, 12, 90, 180),
-                        fontWeight: FontWeight.bold,
-                      )),
-                      Wrap(
-                        spacing: 8,
-                        children: (recipeData['labels'] as List).map((label) {
-                          return Chip(
-                            label: Text(label),
-                            backgroundColor: const Color.fromARGB(255, 12, 90, 180).withOpacity(0.2),
-                            labelStyle: TextStyle(
-                              color: const Color.fromARGB(255, 12, 90, 180),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                const SizedBox(height: 16),
-                RichText(
-                  text: TextSpan(
-                    style: DefaultTextStyle.of(context).style,
-                    children: _parseContent(recipeData['content']),
-                  ),
+  Future<void> _showRecipeDialogWeb(BuildContext context, dynamic entry, String name) async {
+    final recipeData = entry.value;
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(recipeData['title']),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (recipeData['labels'] != null && recipeData['labels'].isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Labels:', style: TextStyle(
+                      color: const Color.fromARGB(255, 12, 90, 180),
+                      fontWeight: FontWeight.bold,
+                    )),
+                    Wrap(
+                      spacing: 8,
+                      children: (recipeData['labels'] as List).map((label) {
+                        return Chip(
+                          label: Text(label),
+                          backgroundColor: const Color.fromARGB(255, 12, 90, 180).withOpacity(0.2),
+                          labelStyle: TextStyle(
+                            color: const Color.fromARGB(255, 12, 90, 180),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-              ],
-            ),
+              const SizedBox(height: 16),
+              RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: _parseContent(recipeData['content']),
+                ),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Schließen'),
-            ),
-            TextButton(
-              onPressed: () => _confirmDelete(context, file),
-              child: const Text('Löschen', style: TextStyle(color: Colors.red)),
-            ),
-          ],
         ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fehler beim Öffnen des Rezepts'))
-        );
-      }
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Schließen'),
+          ),
+          TextButton(
+            onPressed: () => _confirmDeleteWeb(context, entry.key),
+            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _confirmDelete(BuildContext context, FileSystemEntity file) async {
+  Future<void> _confirmDeleteWeb(BuildContext context, String recipeKey) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -526,23 +563,109 @@ class _MyRecipesTabState extends State<MyRecipesTab> {
         ],
       ),
     );
-
     if (shouldDelete == true && mounted) {
-      try {
-        await File(file.path).delete();
-        await _loadRecipes();
-        if (mounted) {
-          Navigator.of(context).pop(); // Schließt das Löschdialogfenster
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Rezept gelöscht!'))
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Fehler beim Löschen'))
-          );
-        }
+      final prefs = await SharedPreferences.getInstance();
+      final allRecipesString = prefs.getString('recipes') ?? '{}';
+      final Map<String, dynamic> allRecipes = jsonDecode(allRecipesString);
+      allRecipes.remove(recipeKey);
+      await prefs.setString('recipes', jsonEncode(allRecipes));
+      await _loadRecipes();
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rezept gelöscht!'))
+        );
+      }
+    }
+  }
+
+  Future<void> _showRecipeDialog(BuildContext context, File file, String name) async {
+    if (kIsWeb) return;
+    final jsonString = await file.readAsString();
+    final recipeData = jsonDecode(jsonString);
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(recipeData['title']),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (recipeData['labels'] != null && recipeData['labels'].isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Labels:', style: TextStyle(
+                      color: const Color.fromARGB(255, 12, 90, 180),
+                      fontWeight: FontWeight.bold,
+                    )),
+                    Wrap(
+                      spacing: 8,
+                      children: (recipeData['labels'] as List).map((label) {
+                        return Chip(
+                          label: Text(label),
+                          backgroundColor: const Color.fromARGB(255, 12, 90, 180).withOpacity(0.2),
+                          labelStyle: TextStyle(
+                            color: const Color.fromARGB(255, 12, 90, 180),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              RichText(
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: _parseContent(recipeData['content']),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Schließen'),
+          ),
+          TextButton(
+            onPressed: () => _confirmDelete(context, file),
+            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, File file) async {
+    if (kIsWeb) return;
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rezept löschen'),
+        content: const Text('Möchten Sie dieses Rezept wirklich löschen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete == true && mounted) {
+      await file.delete();
+      await _loadRecipes();
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rezept gelöscht!'))
+        );
       }
     }
   }
